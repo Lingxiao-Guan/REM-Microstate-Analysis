@@ -1,1 +1,226 @@
+...
+percen = 0.5;
+% N = Seted; % var therhold, Set_from_Judgement
+Mini_Epoch = 2; % 2s mini-epoch
+percentage = 0.5;  % 50% level
+numUV = 85; % 
+fs = 256;
+exam = 1;
+[Whole,epoch_lengthes_phasic,epoch_lengthes_tonic,ALL_length] = Function_REM_SubStages_WithEpoch(Data,exam,moved,nstd,Mini_Epoch,fs,percentage,numUV);
+...
 
+
+function [Whole, epoch_lengths_phasic, epoch_lengths_tonic, total_sleep_duration] = Function_REM_SubStages_WithEpoch(Data, exam, moved, nstd, Mini_Epoch, fs, percentage, numUV)
+% Function description: Segment REM sub-stages
+% Inputs:
+%   Data: channel_num*data matrix, the input can be the whole dataset
+%   exam: whether to plot to check results (1=plot; 0=no plot)
+%   moved: average window length for sub-stage calculation
+%   nstd: multiple of the STD threshold
+%   numUV: UV threshold for each channel
+%   fs: sampling rate
+%   Mini_epochs: segment and label in seconds
+% Outputs:
+%   Whole: All data, including mini epoch labels, Phasic/Tonic distribution
+%   epoch_lengths_phasic: Length of each Phasic segment
+%   epoch_lengths_tonic: Length of each Tonic segment
+%   total_sleep_duration: Total duration of sleep
+
+% Initialize variables
+ALL_calcu_change = Data;
+labels_all = ones(1, length(Data(1, :)));
+labels_all(Data(12, :) ~= 5) = nan;
+density_all = ones(1, length(Data(1, :)));
+density_all(Data(12, :) ~= 5) = nan;
+ALL_calcu_change = Data(:, Data(12, :) == 5);
+labels = Data(12, :);
+labels_sleep = labels(ismember(labels, [1, 2, 3, 5]));
+total_sleep_duration = length(labels_sleep) / fs;
+
+% Label processing
+labels_Rem = ones(1, length(ALL_calcu_change(1, :))) - 2; % -1 represents no staging
+EOG_channel = ALL_calcu_change(7, :) - ALL_calcu_change(8, :); % Difference used for distinction
+k = moved * fs; % Size of moving variance, 10s per move
+calcu_var = movvar(EOG_channel, k); % Calculate moving variance
+x = nstd * var(EOG_channel); % Threshold
+thresh = calcu_var;
+high_part = x >= thresh;
+high_start = find(diff([0 high_part]) == -1); % Phasic start points
+high_end = find(diff([high_part 0]) == 1); % Tonic end points, Phasic start
+
+% Correct mismatch in high start/end lengths
+if length(high_start) ~= length(high_end)
+    if high_start(1) < high_end(1)
+        high_start(end) = [];
+    else
+        high_end(1) = [];
+    end
+end
+
+% Adjust segment lengths based on minimum length
+min_length = 1.5; % Minimum length for Phasic segments in seconds
+diffs = high_end - high_start;
+diff_cut = diffs - fs * min_length;
+transfer_high_end = high_end(diff_cut < 0);
+transfer_high_start = high_start(diff_cut < 0);
+high_end(diff_cut < 0) = [];
+high_start(diff_cut < 0) = [];
+low_start = [1, high_end + 1];
+low_end = [high_start - 1, length(calcu_var)];
+
+% Label segments based on thresholds
+for i = 1:length(low_start)
+    labels_Rem(low_start(i):low_end(i)) = 0; % Tonic
+end
+
+% Process high activity segments
+jmat = [];
+for j = 1:length(high_start)
+    eognow1 = ALL_calcu_change(7, high_start(j):high_end(j));
+    eognow2 = ALL_calcu_change(8, high_start(j):high_end(j));
+    if max(abs(eognow1)) >= [] || max(abs(eognow2)) >= []  % -------  Artifact thershold  ------- 
+        labels_Rem(high_start(j):high_end(j)) = 2; % artifact
+        jmat = [jmat, j];
+    elseif (max(abs(eognow1)) >= numUV && max(abs(eognow2)) >= numUV)
+        labels_Rem(high_start(j):high_end(j)) = 1; % phasic activity
+    else
+        labels_Rem(high_start(j):high_end(j)) = 0; % tonic activity
+        jmat = [jmat, j];
+    end
+end
+
+high_start(jmat) = [];
+high_end(jmat) = [];
+epoch_lengths_phasic = high_end - high_start + 1;
+if high_start(1) == 1
+    if high_end(end) == length(calcu_var)
+       low_start = high_end(1:end-1);
+       low_end = high_start(2:end);
+    else
+       low_start = high_end;
+       low_end = high_start;
+    end
+else 
+    if high_end(end) == length(calcu_var)
+       low_start = [1, high_end(1:end-1)];
+       low_end = high_start;
+    else
+       low_start = [1, high_end];
+       low_end = [high_start, length(calcu_var)];
+    end
+end
+
+epoch_lengths_tonic = low_end - low_start + 1;
+% Further processing based on 2-second epochs
+label_epoch_mat = reshape(labels_Rem, Mini_Epoch * fs, length(labels_Rem) / (Mini_Epoch * fs));
+n1 = Mini_Epoch * fs * percentage; % 50 percent define
+n2 = 1 * Mini_Epoch * fs; % 50 percent define
+for p = 1:length(label_epoch_mat(1, :))
+    if sum(label_epoch_mat(:, p)) >= n1 && sum(label_epoch_mat(:, p)) <= n2
+        label_epoch_mat(:, p) = 1;
+    elseif sum(label_epoch_mat(:, p)) < n1
+        label_epoch_mat(:, p) = 0;
+    elseif sum(label_epoch_mat(:, p)) > n2
+        label_epoch_mat(:, p) = 2;
+    end
+end
+label_epoch = reshape(label_epoch_mat, 1, []);
+% 30-second epochs for density calculation
+label_density_mat = reshape(label_epoch, 30 * fs, length(labels_Rem) / (30 * fs));
+for p = 1:length(label_density_mat(1, :))
+    Phasic_nums_loop = sum(label_density_mat(:, p));
+    density_loop = Phasic_nums_loop / (length(label_density_mat(:, p)));
+    label_density_mat(:, p) = density_loop;
+end
+label_epoch_density = reshape(label_density_mat, 1, []);
+% Reintegrate 2-second labels into the overall labels
+[peaks, peakLocations] = findpeaks(Data(12, :));
+peakLocations(peaks ~= 5) = [];
+peaks(peaks ~= 5) = [];
+
+[peaks_reverse, peakLocations_reverse] = findpeaks(flip(Data(12, :)));
+peakLocations_reverse(peaks_reverse ~= 5) = [];
+peaks_reverse(peaks_reverse ~= 5) = [];
+peakLocations_reverse = length(Data(12, :)) - peakLocations_reverse;
+peaks_reverse = flip(peaks_reverse);
+
+REM_starts = peakLocations;
+REM_Ends = peakLocations_reverse + 1;
+REM_Ends = flip(REM_Ends);
+starts = 1;
+for k = 1:length(REM_starts)
+    add = label_epoch(starts:(REM_Ends(k) - REM_starts(k) + starts));
+    add2 = label_epoch_density(starts:(REM_Ends(k) - REM_starts(k) + starts));
+    labels_all(REM_starts(k):REM_Ends(k)) = add;
+    density_all(REM_starts(k):REM_Ends(k)) = add2;
+    starts = starts + REM_Ends(k) - REM_starts(k) + 1;
+end
+Whole_1 = [Data; labels_all];
+Whole = [Whole_1; density_all];
+
+% Plot results for verification
+if exam == 1
+    figure('Color', [1 1 1]);
+    AX1 = subplot(8, 1, 1);
+    plot((1:length(ALL_calcu_change(7, :))) / fs, ALL_calcu_change(7, :));
+    ylim([-100 100]);
+    hold on;
+    box off;
+    xlabel('Time (s)', 'FontName', 'Times New Roman');
+    ylabel('Amp (uv)', 'FontName', 'Times New Roman');
+    title('Channel: EOG1', 'FontName', 'Times New Roman');
+
+    AX2 = subplot(8, 1, 2);
+    plot((1:length(ALL_calcu_change(8, :))) / fs, ALL_calcu_change(8, :));
+    ylim([-100 100]);
+    hold on;
+
+    box off;
+    xlabel('Time (s)', 'FontName', 'Times New Roman');
+    ylabel('Amp (uv)', 'FontName', 'Times New Roman');
+    title('Channel: EOG2', 'FontName', 'Times New Roman');
+
+    AX3 = subplot(8, 1, [3, 4]);
+    plot((1:length(EOG_channel)) / fs, EOG_channel);
+    ylim([-100 100]);
+    hold on;
+    for i = 1:length(high_start)
+        fill([high_start(i) / fs, high_end(i) / fs, high_end(i) / fs, high_start(i) / fs], [-100, -100, 100, 100], [078 158 180] / 256, 'FaceAlpha', 0.2, 'EdgeColor', 'none');
+    end
+    hold on;
+    plot((1:length(ALL_calcu_change(7, :))) / fs, label_epoch * 50 - 250, 'Color', [255 / 256, 130 / 256, 131 / 256], 'LineWidth', 2);
+    try
+        plot((1:length(ALL_calcu_change(7, :))) / fs, label_epoch_density * 200 + 100, 'Color', [255 / 256, 130 / 256, 131 / 256], 'LineWidth', 2);
+    end
+    box off;
+    xlabel('Time (s)', 'FontName', 'Times New Roman');
+    ylabel('Amp (uv)', 'FontName', 'Times New Roman');
+    title('Channel: EOG2-EOG1', 'FontName', 'Times New Roman');
+
+    AX4 = subplot(8, 1, [5, 6]);
+    plot((1:length(calcu_var)) / fs, calcu_var);
+    hold on;
+    plot((1:length(ALL_calcu_change)) / fs, ones(length(ALL_calcu_change), 1) * x);
+    ylim([0 600]);
+    xlabel('Time (s)', 'FontName', 'Times New Roman');
+    ylabel('Moved Var (uv^2)', 'FontName', 'Times New Roman');
+    subtitle('Moved Var', 'FontName', 'Times New Roman');
+    box off;
+
+    AX5 = subplot(8, 1, [7, 8]);
+    PMTM_window = 2;
+    [Pxx1, F1, ~, ~, ~, ~] = f1_PSGprocess_calcu_plot_PMTM(EOG_channel, 1, 1, PMTM_window, fs, 5, 10, 12);
+    close;
+    pcolor(((1:length(Pxx1(1, :))) * PMTM_window), F1, 10 * log10(abs(Pxx1)));
+    shading interp;
+    colormap jet;
+    axis xy;
+    xlabel('Time (s)', 'FontName', 'Times New Roman');
+    ylabel('Frequency', 'FontName', 'Times New Roman');
+    subtitle('T-F of Eog', 'FontName', 'Times New Roman');
+    caxis([-10 25]);
+    ylim([0 30]);
+    linkaxes([AX1, AX2, AX3, AX4, AX5], 'x');
+    xlim([6 10]);
+end
+end
