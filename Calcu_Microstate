@@ -1,4 +1,5 @@
 ...
+% parameter set
 percen = 0.5;
 % N = Seted; % var therhold, Set_from_Judgement
 Mini_Epoch = 2; % 2s mini-epoch
@@ -6,6 +7,7 @@ percentage = 0.5;  % 50% level
 numUV = 85; % 
 fs = 256;
 exam = 1;
+% The signal quality may vary across different recording devices, and the parameters in the function usually need to be adjusted based on the expert's visual segmentation.
 [Whole,epoch_lengthes_phasic,epoch_lengthes_tonic,ALL_length] = Function_REM_SubStages_WithEpoch(Data,exam,moved,nstd,Mini_Epoch,fs,percentage,numUV);
 ...
 
