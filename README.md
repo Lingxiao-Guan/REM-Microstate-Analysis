@@ -1,7 +1,7 @@
-# Function_REM_SubStages_WithEpoch
+# REM Microstates Seg
 
 ## Description
-`Function_REM_SubStages_WithEpoch` is an example MATLAB function designed to analyze and segment REM sleep into microstages, distinguishing between Phasic and Tonic periods based on EOG (Electrooculography) data.
+an example MATLAB function designed to analyze and segment REM sleep into microstages, distinguishing between Phasic and Tonic periods based on EOG (Electrooculography) data.
 
 ## Features
 - Segment REM sleep into Phasic and Tonic stages.
