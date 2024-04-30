@@ -12,7 +12,6 @@ The signal quality may vary across different recording devices, and the paramete
 ## Inputs
 - `signalData`: A data matrix with aligned EEG, LFP, EOG, Staging... 
 - `plotFlag`: Set to 1 to generate plots for examining the segmentation results; 0 otherwise.
-- `movwind`: Window length in seconds used for moving variance calculation. example 1s
 - `thresholdFactor`: Multiple of the standard deviation to set the threshold for defining high activity regions. example 0.75 
 - `epochDuration`: Duration in seconds for mini-epoch segmentation. example: 2s
 - `samplingRate`: Sampling rate of the data. example: 256Hz 
