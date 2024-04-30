@@ -2,6 +2,7 @@
 
 ## Description
 an example MATLAB function designed to analyze and segment REM sleep into microstages, distinguishing between Phasic and Tonic periods based on EOG (Electrooculography) data.
+The signal quality may vary across different recording devices, and the parameters in the function usually need to be adjusted based on the expert's visual segmentation.
 
 ## Features
 - Segment REM sleep into Phasic and Tonic stages.
